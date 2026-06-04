@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pi3Groq Companion</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/vendor/xterm/xterm.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">Pi3Groq</div>
+        <h1>Whisplay Keyboard Companion</h1>
+        <p class="lede">Type to Whisplay from a local Pi browser UI, while the local touch display can run as a full mirror or as an AI screensaver that pops into chat text when Whisplay is active.</p>
+      </div>
+      <div class="hero-actions">
+        <a id="openWhisplayBtn" class="button secondary" href="#" target="_blank" rel="noopener">Open Whisplay UI</a>
+        <a class="button secondary" href="/hdmi" target="_blank" rel="noopener">Open Touch Display</a>
+      </div>
+    </header>
+
+    <section class="panel settings-panel">
+      <div class="panel-title">Companion Settings</div>
+      <form id="settingsForm" class="settings-grid">
+        <label class="field">
+          <span>Mode</span>
+          <select id="modeSelect">
+            <option value="companion">Companion</option>
+            <option value="standalone" disabled>Standalone (Later)</option>
+          </select>
+        </label>
+        <label class="field field-wide">
+          <span>Whisplay Base URL</span>
+          <input id="companionBaseUrlInput" type="text" placeholder="http://10.160.0.136:17880" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>Poll Interval</span>
+          <select id="pollIntervalSelect">
+            <option value="1000">1 second</option>
+            <option value="1500">1.5 seconds</option>
+            <option value="2000">2 seconds</option>
+            <option value="3000">3 seconds</option>
+            <option value="5000">5 seconds</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Touch Display Mode</span>
+          <select id="touchDisplayModeSelect">
+            <option value="slideshow-chat">AI Screensaver + Chat Text</option>
+            <option value="mirror">Full Mirror</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Touch Display Rotation</span>
+          <select id="touchDisplayRotationSelect">
+            <option value="0">0°</option>
+            <option value="90">90°</option>
+            <option value="180">180°</option>
+            <option value="270">270°</option>
+          </select>
+        </label>
+        <div class="field field-toggle">
+          <span>AI Slideshow</span>
+          <label class="checkbox-row" for="slideshowEnabledCheckbox">
+            <input id="slideshowEnabledCheckbox" type="checkbox" />
+            <span>Enable AI gallery screensaver when the touch display is in screensaver mode</span>
+          </label>
+        </div>
+        <label class="field">
+          <span>Slide Interval</span>
+          <select id="slideshowIntervalSelect">
+            <option value="3">3 seconds</option>
+            <option value="5">5 seconds</option>
+            <option value="8">8 seconds</option>
+            <option value="10">10 seconds</option>
+            <option value="15">15 seconds</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Return to Screensaver</span>
+          <select id="chatReturnTimeoutSelect">
+            <option value="5">5 seconds</option>
+            <option value="10">10 seconds</option>
+            <option value="15">15 seconds</option>
+            <option value="20">20 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="45">45 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </label>
+        <div class="field field-actions">
+          <button class="button" id="saveSettingsBtn" type="submit">Save Companion</button>
+        </div>
+      </form>
+      <div class="status-row">
+        <span id="settingsStatus" class="muted">Save the Whisplay URL first, then start chatting here.</span>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <section class="panel chat-panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Keyboard Chat</div>
+            <div id="companionStatus" class="muted">Waiting for companion state...</div>
+          </div>
+          <div class="counter-strip">
+            <span id="llmModelBadge" class="badge">No model</span>
+            <span id="groqRequestsBadge" class="badge secondary">RPD --</span>
+            <span id="geminiBalanceBadge" class="badge secondary">$ --</span>
+          </div>
+        </div>
+
+        <div id="conversationLog" class="conversation-log"></div>
+
+        <form id="chatForm" class="composer">
+          <textarea id="chatInput" rows="3" placeholder="Type a normal message or a photo-edit request like: edit photo with a neon glow and dramatic storm lighting"></textarea>
+          <div class="composer-actions">
+            <span class="muted">Photo editing rides the normal Whisplay text path.</span>
+            <button class="button" id="sendBtn" type="submit">Send</button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="panel preview-panel">
+        <div class="panel-title">Remote Whisplay State</div>
+        <div class="preview-stack">
+          <div class="preview-box">
+            <div class="field-label">Status</div>
+            <div id="remoteStatusText" class="large-status">--</div>
+          </div>
+          <div class="preview-box">
+            <div class="field-label">Emoji</div>
+            <div id="remoteEmojiText" class="emoji-text">🙂</div>
+          </div>
+          <div class="preview-box">
+            <div class="field-label">Latest Reply Snapshot</div>
+            <pre id="remoteReplyText" class="reply-preview">Waiting for Whisplay...</pre>
+          </div>
+          <div class="preview-box">
+            <div class="field-label">Current Image</div>
+            <img id="remoteImage" alt="Current Whisplay image" class="remote-image" hidden />
+            <div id="remoteImageEmpty" class="muted">No active image from Whisplay.</div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel pi-agent-panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">PiAgent Browser Terminal</div>
+          <div id="piAgentStatus" class="muted">Checking local PiAgent runtime...</div>
+        </div>
+        <div class="composer-actions">
+          <button class="button secondary" id="piAgentStartBtn" type="button">Start PiAgent</button>
+          <button class="button secondary" id="piAgentStopBtn" type="button">Stop PiAgent</button>
+        </div>
+      </div>
+      <div class="muted pi-agent-note">PiAgent runs unchanged on the Pi3 companion. Use the terminal below for <code>/login</code>, model selection, and chat.</div>
+      <div id="piAgentTerminal" class="pi-agent-terminal"></div>
+
+      <div class="pi-agent-projects-grid">
+        <aside class="pi-agent-project-sidebar">
+          <div class="panel-title">PiAgent Projects</div>
+          <label class="field">
+            <span>Project Name</span>
+            <input id="piAgentProjectName" type="text" placeholder="ESP32 Blink Test" />
+          </label>
+          <label class="field">
+            <span>Starter Brief</span>
+            <textarea id="piAgentProjectStarter" rows="4" placeholder="Simple text to describe what this project should be. It will be saved into README.md for PiAgent to see."></textarea>
+          </label>
+          <div class="composer-actions">
+            <button class="button secondary" id="piAgentProjectCreateBtn" type="button">Create Project</button>
+          </div>
+          <div id="piAgentProjectStatus" class="muted">Create a lightweight project sandbox, then start PiAgent inside it.</div>
+          <div id="piAgentProjectsList" class="pi-agent-project-list"></div>
+        </aside>
+
+        <section class="pi-agent-project-workspace">
+          <div class="panel-title">Project Workspace</div>
+          <div id="piAgentWorkspaceStatus" class="muted">Select a PiAgent project to view its files.</div>
+          <div class="pi-agent-workspace-grid">
+            <div class="pi-agent-tree-card">
+              <div class="field-label">Files</div>
+              <div id="piAgentFileTree" class="pi-agent-file-tree"></div>
+            </div>
+            <div class="pi-agent-editor-card">
+              <div class="panel-header">
+                <div>
+                  <div class="field-label">Editor</div>
+                  <div id="piAgentFilePath" class="muted">Choose a file from the project tree.</div>
+                </div>
+                <div class="composer-actions">
+                  <button class="button secondary" id="piAgentSaveFileBtn" type="button">Save File</button>
+                </div>
+              </div>
+              <textarea id="piAgentFileEditor" class="pi-agent-file-editor" spellcheck="false" placeholder="File contents will appear here when you open a project file."></textarea>
+              <div id="piAgentEditorStatus" class="muted">No file loaded.</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/vendor/xterm/xterm.js"></script>
+  <script src="/static/vendor/xterm/addon-fit.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
