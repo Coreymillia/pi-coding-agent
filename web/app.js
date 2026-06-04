@@ -37,6 +37,15 @@ const piAgentFilePath = document.getElementById("piAgentFilePath");
 const piAgentFileEditor = document.getElementById("piAgentFileEditor");
 const piAgentSaveFileBtn = document.getElementById("piAgentSaveFileBtn");
 const piAgentEditorStatus = document.getElementById("piAgentEditorStatus");
+const devToolsRuntimeStatus = document.getElementById("devToolsRuntimeStatus");
+const refreshDevToolsBtn = document.getElementById("refreshDevToolsBtn");
+const openBrowserIdeBtn = document.getElementById("openBrowserIdeBtn");
+const platformioStatus = document.getElementById("platformioStatus");
+const platformioMeta = document.getElementById("platformioMeta");
+const desktopCodeStatus = document.getElementById("desktopCodeStatus");
+const desktopCodeMeta = document.getElementById("desktopCodeMeta");
+const browserIdeStatus = document.getElementById("browserIdeStatus");
+const browserIdeMeta = document.getElementById("browserIdeMeta");
 
 let settings = null;
 let pollTimer = null;
@@ -52,6 +61,7 @@ let piAgentProjects = [];
 let activePiAgentProject = null;
 let activePiAgentFilePath = "";
 let activePiAgentFileMtimeMs = null;
+let devToolsState = null;
 
 function escapeHtml(value) {
   return String(value || "")
@@ -296,6 +306,92 @@ function setPiAgentEditorStatus(message, isError = false) {
   }
   piAgentEditorStatus.textContent = message;
   piAgentEditorStatus.style.color = isError ? "var(--danger)" : "";
+}
+
+function setButtonLinkState(link, href, enabled) {
+  if (!link) {
+    return;
+  }
+  link.href = enabled ? href : "#";
+  link.setAttribute("aria-disabled", enabled ? "false" : "true");
+}
+
+function buildBrowserIdeUrl(browserIde) {
+  const port = Number(browserIde?.defaultPort || 0);
+  if (!port) {
+    return "";
+  }
+  const url = new URL(window.location.href);
+  url.port = String(port);
+  url.pathname = browserIde?.defaultPath || "/";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function applyDevToolsState(nextState) {
+  devToolsState = nextState || {};
+  if (devToolsRuntimeStatus) {
+    devToolsRuntimeStatus.style.color = "";
+  }
+  const platformio = devToolsState.platformio || {};
+  const desktopCode = devToolsState.desktopCode || {};
+  const browserIde = devToolsState.browserIde || {};
+
+  if (platformio.installed) {
+    platformioStatus.textContent = `Installed${platformio.version ? ` · ${platformio.version}` : ""}`;
+    platformioMeta.innerHTML = platformio.binaryPath
+      ? `<code>${escapeHtml(platformio.binaryPath)}</code>`
+      : "PlatformIO CLI is available for PiAgent terminal and browser IDE terminal use.";
+  } else {
+    platformioStatus.textContent = "Not installed";
+    platformioMeta.innerHTML = `Run <code>${escapeHtml(platformio.installHint || "bash scripts/install-platformio.sh")}</code> on the Pi to install the <code>pio</code> CLI.`;
+  }
+
+  if (desktopCode.installed) {
+    desktopCodeStatus.textContent = `Installed${desktopCode.version ? ` · ${desktopCode.version}` : ""}`;
+    if (desktopCode.displayAvailable) {
+      desktopCodeMeta.textContent = desktopCode.binaryPath
+        ? `${desktopCode.binaryPath} is on PATH and a display session is visible.`
+        : "Desktop VS Code is on PATH and a display session is visible.";
+    } else {
+      desktopCodeMeta.textContent = desktopCode.binaryPath
+        ? `${desktopCode.binaryPath} is installed, but no GUI display session is visible here, so running 'code' from SSH will not open a window.`
+        : "Desktop VS Code is installed, but no GUI display session is visible here, so running 'code' from SSH will not open a window.";
+    }
+  } else {
+    desktopCodeStatus.textContent = "Not detected";
+    desktopCodeMeta.textContent = "No desktop VS Code command was found on PATH for this Pi3Groq process.";
+  }
+
+  if (browserIde.installed) {
+    const browserIdeUrl = buildBrowserIdeUrl(browserIde);
+    browserIdeStatus.textContent = `${browserIde.label || browserIde.kind || "Browser IDE"} detected${browserIde.version ? ` · ${browserIde.version}` : ""}`;
+    browserIdeMeta.textContent = browserIde.binaryPath
+      ? `${browserIde.binaryPath} is installed. Open the default browser IDE URL to get a VS Code-style file tree and integrated terminal on the Pi.`
+      : "Browser IDE detected.";
+    setButtonLinkState(openBrowserIdeBtn, browserIdeUrl, Boolean(browserIdeUrl));
+    devToolsRuntimeStatus.textContent = platformio.installed
+      ? "PlatformIO and browser IDE tooling are ready for Pi-side coding."
+      : "Browser IDE is available. Install PlatformIO to use pio from the integrated terminal.";
+  } else {
+    browserIdeStatus.textContent = "Not installed";
+    browserIdeMeta.textContent = "Recommended path: install code-server or OpenVSCode Server on the Pi, then run PiAgent and PlatformIO in the integrated terminal.";
+    setButtonLinkState(openBrowserIdeBtn, "#", false);
+    devToolsRuntimeStatus.textContent = platformio.installed
+      ? "PlatformIO is ready. A browser IDE is not installed yet."
+      : "PlatformIO and browser IDE are not installed yet on this Pi.";
+  }
+}
+
+async function loadDevToolsStatus() {
+  const response = await fetch("/api/dev-tools/status", { cache: "no-store" });
+  const payload = await response.json();
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Failed to load local dev tool status.");
+  }
+  applyDevToolsState(payload.tools || {});
+  return payload.tools || {};
 }
 
 function escapeProjectHtml(value) {
@@ -756,6 +852,16 @@ piAgentSaveFileBtn?.addEventListener("click", async () => {
     setPiAgentEditorStatus(error instanceof Error ? error.message : "Failed to save file.", true);
   }
 });
+refreshDevToolsBtn?.addEventListener("click", async () => {
+  try {
+    await loadDevToolsStatus();
+  } catch (error) {
+    if (devToolsRuntimeStatus) {
+      devToolsRuntimeStatus.textContent = error instanceof Error ? error.message : "Failed to refresh local dev tool status.";
+      devToolsRuntimeStatus.style.color = "var(--danger)";
+    }
+  }
+});
 
 window.addEventListener("load", async () => {
   renderConversation();
@@ -768,6 +874,7 @@ window.addEventListener("load", async () => {
     startPolling();
     await pollState();
     await loadPiAgentStatus();
+    await loadDevToolsStatus();
     await loadPiAgentProjects();
     if (activePiAgentProject?.id) {
       await selectPiAgentProject(activePiAgentProject.id);

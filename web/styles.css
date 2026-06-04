@@ -264,8 +264,38 @@ textarea {
   padding: 18px;
 }
 
+.dev-tools-panel {
+  margin-top: 16px;
+  padding: 18px;
+}
+
 .pi-agent-note {
   margin-bottom: 12px;
+}
+
+.dev-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dev-tool-card {
+  background: rgba(10, 16, 24, 0.6);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.dev-tool-status {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.button[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.55;
 }
 
 .pi-agent-terminal {
@@ -372,6 +402,7 @@ textarea {
 }
 
 @media (max-width: 1100px) {
+  .dev-tools-grid,
   .pi-agent-projects-grid,
   .pi-agent-workspace-grid {
     grid-template-columns: 1fr;

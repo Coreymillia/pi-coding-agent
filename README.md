@@ -7,6 +7,7 @@ It now stands on its own as a **Pi-hosted coding workspace** with:
 - a local PiAgent browser terminal
 - lightweight project sandboxes with tree browsing and file editing
 - a local browser UI for running the Pi coding-agent workflow
+- local dev-tool status for PlatformIO plus desktop/browser VS Code detection
 - optional Whisplay companion polling when you want to pair it with a Whisplay device
 
 This project is no longer meant to be pushed back into the larger Whisplay repo as its main home. Whisplay support is still optional, but the Pi coding-agent flow is now the primary purpose.
@@ -112,6 +113,22 @@ The browser UI now also supports lightweight PiAgent project workspaces:
 - open files in the browser
 - save file edits back into the selected project
 - start PiAgent inside the selected project root without changing PiAgent itself
+
+The main browser page also includes a **Local Dev Tools** panel:
+
+- confirms whether `pio` is installed on the Pi
+- confirms whether desktop `code` is actually on `PATH`
+- explains why `code` launched from SSH may do nothing when there is no desktop display session
+- detects a browser IDE such as `code-server` or `openvscode-server` and exposes the default browser URL
+
+For PlatformIO on the Pi, use:
+
+```bash
+cd Pi3Groq
+bash scripts/install-platformio.sh
+```
+
+For a VS Code-style workflow on the Pi, a **browser IDE is the practical path**. Once `code-server` or `OpenVSCode Server` is installed, use that browser IDE for the file tree and integrated terminal, then run `pi-agent` and `pio` from inside the terminal there.
 
 The `/hdmi` touch-display page can also mirror PiAgent chat activity:
 

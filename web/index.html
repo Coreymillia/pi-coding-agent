@@ -205,6 +205,37 @@
         </section>
       </div>
     </section>
+
+    <section class="panel dev-tools-panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Local Dev Tools</div>
+          <div id="devToolsRuntimeStatus" class="muted">Checking PlatformIO and VS Code options on this Pi...</div>
+        </div>
+        <div class="composer-actions">
+          <button class="button secondary" id="refreshDevToolsBtn" type="button">Refresh Tool Status</button>
+          <a id="openBrowserIdeBtn" class="button secondary" href="#" target="_blank" rel="noopener" aria-disabled="true">Open Browser IDE</a>
+        </div>
+      </div>
+      <div class="muted pi-agent-note">The main Keyboard Chat box sends text to Whisplay. PiAgent is the local terminal session. If you want a VS Code-style workflow, the practical path is a browser IDE with PiAgent and <code>pio</code> running in its integrated terminal.</div>
+      <div class="dev-tools-grid">
+        <article class="dev-tool-card">
+          <div class="field-label">PlatformIO CLI</div>
+          <div id="platformioStatus" class="dev-tool-status">Checking...</div>
+          <div id="platformioMeta" class="muted">Install helper: <code>bash scripts/install-platformio.sh</code></div>
+        </article>
+        <article class="dev-tool-card">
+          <div class="field-label">Desktop VS Code</div>
+          <div id="desktopCodeStatus" class="dev-tool-status">Checking...</div>
+          <div id="desktopCodeMeta" class="muted">If this only works on the Pi desktop, <code>code</code> from SSH will not pop a window open.</div>
+        </article>
+        <article class="dev-tool-card">
+          <div class="field-label">Browser IDE</div>
+          <div id="browserIdeStatus" class="dev-tool-status">Checking...</div>
+          <div id="browserIdeMeta" class="muted">Recommended for a file tree + editor + integrated terminal on the Pi.</div>
+        </article>
+      </div>
+    </section>
   </main>
 
   <script src="/static/vendor/xterm/xterm.js"></script>

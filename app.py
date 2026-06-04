@@ -10,6 +10,7 @@ import os
 import pty
 import posixpath
 import re
+import shutil
 import select
 import signal
 import subprocess
@@ -397,6 +398,78 @@ def normalize_chat_return_timeout(value: Any) -> int:
     except (TypeError, ValueError):
         interval = DEFAULT_SETTINGS.chatReturnTimeoutSec
     return min(300, max(5, interval))
+
+
+def read_command_version(command: list[str], timeout: float = 4.0) -> str:
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    output = (completed.stdout or completed.stderr or "").strip()
+    return output.splitlines()[0].strip() if output else ""
+
+
+def build_command_status(
+    executable: str,
+    *,
+    version_args: list[str] | None = None,
+) -> dict[str, Any]:
+    binary_path = shutil.which(executable) or ""
+    return {
+        "installed": bool(binary_path),
+        "binaryPath": binary_path,
+        "version": read_command_version([binary_path, *(version_args or ["--version"])]) if binary_path else "",
+    }
+
+
+def build_browser_ide_status() -> dict[str, Any]:
+    candidates = [
+        ("code-server", "code-server", 8080, "/"),
+        ("openvscode-server", "OpenVSCode Server", 3000, "/"),
+    ]
+    for executable, label, port, path in candidates:
+        status = build_command_status(executable)
+        if status["installed"]:
+            return {
+                **status,
+                "kind": executable,
+                "label": label,
+                "defaultPort": port,
+                "defaultPath": path,
+            }
+    return {
+        "installed": False,
+        "binaryPath": "",
+        "version": "",
+        "kind": "",
+        "label": "",
+        "defaultPort": None,
+        "defaultPath": "/",
+    }
+
+
+def build_dev_tools_status() -> dict[str, Any]:
+    desktop_code = build_command_status("code")
+    return {
+        "platformio": {
+            **build_command_status("pio"),
+            "installHint": "bash scripts/install-platformio.sh",
+        },
+        "desktopCode": {
+            **desktop_code,
+            "displayAvailable": bool(os.getenv("DISPLAY")),
+            "sessionType": str(os.getenv("XDG_SESSION_TYPE", "") or "").strip(),
+        },
+        "browserIde": build_browser_ide_status(),
+        "pipx": build_command_status("pipx"),
+        "python3": build_command_status("python3"),
+    }
 
 
 def coerce_int(value: Any, default: int = 0) -> int:
@@ -1090,6 +1163,9 @@ class Pi3GroqHandler(BaseHTTPRequestHandler):
                 self,
                 {"ok": True, "piAgent": self.server.pi_agent_session.status()},
             )
+            return
+        if route == "/api/dev-tools/status":
+            json_response(self, {"ok": True, "tools": build_dev_tools_status()})
             return
         if route == "/api/pi-agent/projects":
             json_response(
