@@ -129,6 +129,18 @@ http://127.0.0.1:18600/vscode
 
 That route is meant to open in a **new browser window** and redirect to the detected browser IDE, leaving the normal Pi3Groq PiAgent page unchanged.
 
+Inside the VS Code terminal, use:
+
+```bash
+bash scripts/pi-agent-vscode.sh
+```
+
+That opens PiAgent's session picker (`--resume`) with the correct local PATH for the Pi. You can also pass normal PiAgent arguments through it, for example:
+
+```bash
+bash scripts/pi-agent-vscode.sh --continue
+```
+
 For PlatformIO on the Pi, use:
 
 ```bash
@@ -136,7 +148,7 @@ cd Pi3Groq
 bash scripts/install-platformio.sh
 ```
 
-For a VS Code-style workflow on the Pi, a **browser IDE is the practical path**. Once `code-server` or `OpenVSCode Server` is installed, use that browser IDE for the file tree and integrated terminal, then run `pi-agent` and `pio` from inside the terminal there.
+For a VS Code-style workflow on the Pi, a **browser IDE is the practical path**. Pi3Groq can use `code-server`, `OpenVSCode Server`, or local `code serve-web` when that VS Code build supports it. Use that browser IDE for the file tree and integrated terminal, then run `pi-agent` and `pio` from inside the terminal there.
 
 The `/hdmi` touch-display page can also mirror PiAgent chat activity:
 
