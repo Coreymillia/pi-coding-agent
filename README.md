@@ -6,7 +6,7 @@ It now stands on its own as a **Pi-hosted coding workspace** with:
 
 - a local PiAgent browser terminal
 - lightweight project sandboxes with tree browsing and file editing
-- a touch-display `/hdmi` page that can show PiAgent chat directly on the Pi
+- a local browser UI for running the Pi coding-agent workflow
 - optional Whisplay companion polling when you want to pair it with a Whisplay device
 
 This project is no longer meant to be pushed back into the larger Whisplay repo as its main home. Whisplay support is still optional, but the Pi coding-agent flow is now the primary purpose.
@@ -18,14 +18,19 @@ This project is no longer meant to be pushed back into the larger Whisplay repo 
 - optional Whisplay companion mode still talks to Whisplay over HTTP using:
   - `GET /api/state`
   - `POST /api/input/text`
-- the Pi also serves a local `/hdmi` touch-display page for direct on-device interaction
+- the Pi also serves a local `/hdmi` touch-display page for in-progress local display work
 
-## Screenshots
+## Photos
 
-Example images from this fork live in `images/`:
+![Pi Coding Agent photo 1](images/IMG_20260603_161803721_HDR.jpg)
 
-- `images/IMG_20260603_161803721_HDR.jpg`
-- `images/IMG_20260603_163655685_HDR.jpg`
+![Pi Coding Agent photo 2](images/IMG_20260603_163655685_HDR.jpg)
+
+## Known bugs
+
+- touch screen support is not confirmed working yet
+- Whisplay mirror mode is currently unreliable and may not work at all while polling
+- the browser UI and optional Whisplay polling are the currently supported paths
 
 ## Current wiring target
 
@@ -42,7 +47,7 @@ The first software pass is browser-first so the local companion flow can be test
 - 3.5-inch portrait display
 - `320 x 480`
 - XPT2046 touch controller
-- Pi3Groq `/hdmi` is now the local touch-display page for this screen
+- Pi3Groq `/hdmi` is the intended local touch-display page for this screen
 - tested/default TFT path uses the LCDWiki-style `tft35a` overlay generated from `scripts/tft35a-overlay.dts`
   - ILI9486 panel with the board-specific init sequence
   - `reset=GPIO25`
