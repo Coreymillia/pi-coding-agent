@@ -68,6 +68,8 @@ PI_AGENT_MAX_FILE_BYTES = 512 * 1024
 PI_AGENT_DISPLAY_TEXT_LIMIT = 12000
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\].*?(?:\x07|\x1b\\))")
 PI_AGENT_AUTOSTART = os.getenv("PI3GROQ_PI_AGENT_AUTOSTART", "true").strip().lower() not in {"0", "false", "no", "off"}
+BROWSER_IDE_PORT_OVERRIDE = os.getenv("PI3GROQ_BROWSER_IDE_PORT", "").strip()
+BROWSER_IDE_PATH_OVERRIDE = os.getenv("PI3GROQ_BROWSER_IDE_PATH", "").strip()
 
 
 @dataclass
@@ -433,6 +435,11 @@ def build_browser_ide_status() -> dict[str, Any]:
         ("code-server", "code-server", 8080, "/"),
         ("openvscode-server", "OpenVSCode Server", 3000, "/"),
     ]
+    try:
+        configured_port = int(BROWSER_IDE_PORT_OVERRIDE) if BROWSER_IDE_PORT_OVERRIDE else None
+    except ValueError:
+        configured_port = None
+    configured_path = BROWSER_IDE_PATH_OVERRIDE if BROWSER_IDE_PATH_OVERRIDE.startswith("/") else ""
     for executable, label, port, path in candidates:
         status = build_command_status(executable)
         if status["installed"]:
@@ -440,8 +447,8 @@ def build_browser_ide_status() -> dict[str, Any]:
                 **status,
                 "kind": executable,
                 "label": label,
-                "defaultPort": port,
-                "defaultPath": path,
+                "defaultPort": configured_port or port,
+                "defaultPath": configured_path or path,
             }
     return {
         "installed": False,
@@ -452,6 +459,22 @@ def build_browser_ide_status() -> dict[str, Any]:
         "defaultPort": None,
         "defaultPath": "/",
     }
+
+
+def build_browser_ide_url(handler: BaseHTTPRequestHandler, browser_ide: dict[str, Any]) -> str:
+    try:
+        port = int(browser_ide.get("defaultPort") or 0)
+    except (TypeError, ValueError):
+        port = 0
+    if port <= 0:
+        return ""
+    raw_host = str(handler.headers.get("Host", "127.0.0.1") or "127.0.0.1")
+    host = raw_host.rsplit(":", 1)[0] if ":" in raw_host else raw_host
+    scheme = "https" if str(handler.headers.get("X-Forwarded-Proto", "")).strip().lower() == "https" else "http"
+    path = str(browser_ide.get("defaultPath", "/") or "/")
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return f"{scheme}://{host}:{port}{path}"
 
 
 def build_dev_tools_status() -> dict[str, Any]:
@@ -632,6 +655,27 @@ def json_response(
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
     handler.wfile.write(data)
+
+
+def html_response(
+    handler: BaseHTTPRequestHandler,
+    html: str,
+    status: int = HTTPStatus.OK,
+) -> None:
+    data = html.encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
+def redirect_response(handler: BaseHTTPRequestHandler, location: str) -> None:
+    handler.send_response(HTTPStatus.FOUND)
+    handler.send_header("Location", location)
+    handler.send_header("Cache-Control", "no-store")
+    handler.end_headers()
 
 
 def fetch_remote_json(
@@ -1150,6 +1194,44 @@ class Pi3GroqHandler(BaseHTTPRequestHandler):
             return
         if route == "/hdmi":
             self.serve_file(WEB_DIR / "hdmi.html", "text/html; charset=utf-8")
+            return
+        if route == "/vscode":
+            browser_ide = build_browser_ide_status()
+            browser_ide_url = build_browser_ide_url(self, browser_ide)
+            if browser_ide.get("installed") and browser_ide_url:
+                redirect_response(self, browser_ide_url)
+                return
+            html_response(
+                self,
+                """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VS Code Mode Not Ready</title>
+  <style>
+    body { margin: 0; font-family: Inter, Segoe UI, sans-serif; background: #0a0f17; color: #e8f1fb; }
+    main { max-width: 760px; margin: 48px auto; padding: 24px; background: rgba(10, 16, 24, 0.92); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; }
+    h1 { margin-top: 0; }
+    code, pre { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 2px 6px; }
+    pre { padding: 14px; overflow: auto; }
+    a { color: #5dd3ff; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>VS Code mode is not ready yet</h1>
+    <p>No browser IDE was detected for Pi3Groq. This mode is meant to open a new browser window for <strong>code-server</strong> or <strong>OpenVSCode Server</strong> while leaving the normal PiAgent browser workflow unchanged.</p>
+    <p>Once a browser IDE is installed, this <code>/vscode</code> path will redirect there automatically.</p>
+    <pre>bash scripts/install-platformio.sh</pre>
+    <p>PlatformIO is separate from the browser IDE. Use the local PiAgent terminal or the future browser IDE terminal for <code>pio</code>.</p>
+    <p><a href="/">Back to Pi3Groq</a></p>
+  </main>
+</body>
+</html>
+""",
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
             return
         if route.startswith("/static/"):
             relative = route.removeprefix("/static/")

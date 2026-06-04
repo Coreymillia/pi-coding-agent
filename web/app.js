@@ -316,19 +316,6 @@ function setButtonLinkState(link, href, enabled) {
   link.setAttribute("aria-disabled", enabled ? "false" : "true");
 }
 
-function buildBrowserIdeUrl(browserIde) {
-  const port = Number(browserIde?.defaultPort || 0);
-  if (!port) {
-    return "";
-  }
-  const url = new URL(window.location.href);
-  url.port = String(port);
-  url.pathname = browserIde?.defaultPath || "/";
-  url.search = "";
-  url.hash = "";
-  return url.toString();
-}
-
 function applyDevToolsState(nextState) {
   devToolsState = nextState || {};
   if (devToolsRuntimeStatus) {
@@ -365,22 +352,21 @@ function applyDevToolsState(nextState) {
   }
 
   if (browserIde.installed) {
-    const browserIdeUrl = buildBrowserIdeUrl(browserIde);
     browserIdeStatus.textContent = `${browserIde.label || browserIde.kind || "Browser IDE"} detected${browserIde.version ? ` · ${browserIde.version}` : ""}`;
     browserIdeMeta.textContent = browserIde.binaryPath
-      ? `${browserIde.binaryPath} is installed. Open the default browser IDE URL to get a VS Code-style file tree and integrated terminal on the Pi.`
+      ? `${browserIde.binaryPath} is installed. VS Code Mode will open a new window to the browser IDE without changing the current PiAgent page.`
       : "Browser IDE detected.";
-    setButtonLinkState(openBrowserIdeBtn, browserIdeUrl, Boolean(browserIdeUrl));
+    setButtonLinkState(openBrowserIdeBtn, "/vscode", true);
     devToolsRuntimeStatus.textContent = platformio.installed
-      ? "PlatformIO and browser IDE tooling are ready for Pi-side coding."
-      : "Browser IDE is available. Install PlatformIO to use pio from the integrated terminal.";
+      ? "PlatformIO and VS Code Mode are ready for Pi-side coding."
+      : "VS Code Mode is available. Install PlatformIO to use pio from the browser IDE terminal.";
   } else {
     browserIdeStatus.textContent = "Not installed";
-    browserIdeMeta.textContent = "Recommended path: install code-server or OpenVSCode Server on the Pi, then run PiAgent and PlatformIO in the integrated terminal.";
+    browserIdeMeta.textContent = "Recommended path: install code-server or OpenVSCode Server on the Pi, then use VS Code Mode to open it in a new window.";
     setButtonLinkState(openBrowserIdeBtn, "#", false);
     devToolsRuntimeStatus.textContent = platformio.installed
-      ? "PlatformIO is ready. A browser IDE is not installed yet."
-      : "PlatformIO and browser IDE are not installed yet on this Pi.";
+      ? "PlatformIO is ready. VS Code Mode is not installed yet on this Pi."
+      : "PlatformIO and VS Code Mode are not installed yet on this Pi.";
   }
 }
 

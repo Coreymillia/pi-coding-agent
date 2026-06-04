@@ -121,6 +121,14 @@ The main browser page also includes a **Local Dev Tools** panel:
 - explains why `code` launched from SSH may do nothing when there is no desktop display session
 - detects a browser IDE such as `code-server` or `openvscode-server` and exposes the default browser URL
 
+Pi3Groq now also exposes a dedicated **VS Code Mode** at:
+
+```text
+http://127.0.0.1:18600/vscode
+```
+
+That route is meant to open in a **new browser window** and redirect to the detected browser IDE, leaving the normal Pi3Groq PiAgent page unchanged.
+
 For PlatformIO on the Pi, use:
 
 ```bash
@@ -146,6 +154,8 @@ Environment overrides:
 
 - `PI3GROQ_PI_AGENT_BIN` - alternate PiAgent executable path
 - `PI3GROQ_PI_AGENT_WS_PORT` - alternate websocket bridge port
+- `PI3GROQ_BROWSER_IDE_PORT` - override the browser IDE port used by `/vscode`
+- `PI3GROQ_BROWSER_IDE_PATH` - override the browser IDE path used by `/vscode`
 
 ## Touch display / HDMI page
 
