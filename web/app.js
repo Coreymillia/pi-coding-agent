@@ -29,6 +29,8 @@ const piAgentTerminal = document.getElementById("piAgentTerminal");
 const piAgentProjectName = document.getElementById("piAgentProjectName");
 const piAgentProjectStarter = document.getElementById("piAgentProjectStarter");
 const piAgentProjectCreateBtn = document.getElementById("piAgentProjectCreateBtn");
+const piAgentProjectUploadBtn = document.getElementById("piAgentProjectUploadBtn");
+const piAgentProjectUploadInput = document.getElementById("piAgentProjectUploadInput");
 const piAgentProjectStatus = document.getElementById("piAgentProjectStatus");
 const piAgentProjectsList = document.getElementById("piAgentProjectsList");
 const piAgentWorkspaceStatus = document.getElementById("piAgentWorkspaceStatus");
@@ -36,6 +38,7 @@ const piAgentFileTree = document.getElementById("piAgentFileTree");
 const piAgentFilePath = document.getElementById("piAgentFilePath");
 const piAgentFileEditor = document.getElementById("piAgentFileEditor");
 const piAgentSaveFileBtn = document.getElementById("piAgentSaveFileBtn");
+const piAgentDownloadProjectBtn = document.getElementById("piAgentDownloadProjectBtn");
 const piAgentEditorStatus = document.getElementById("piAgentEditorStatus");
 const devToolsRuntimeStatus = document.getElementById("devToolsRuntimeStatus");
 const refreshDevToolsBtn = document.getElementById("refreshDevToolsBtn");
@@ -290,6 +293,9 @@ function updatePiAgentButtons() {
   const available = Boolean(piAgentState?.available);
   piAgentStartBtn.disabled = !available || running || !activePiAgentProject;
   piAgentStopBtn.disabled = !running;
+  if (piAgentDownloadProjectBtn) {
+    piAgentDownloadProjectBtn.disabled = !activePiAgentProject;
+  }
 }
 
 function setPiAgentProjectStatus(message, isError = false) {
@@ -611,6 +617,50 @@ async function createPiAgentProject() {
   }
 }
 
+async function uploadPiAgentProjectArchive(file) {
+  if (!file) {
+    return;
+  }
+  setPiAgentProjectStatus(`Uploading ${file.name}...`);
+  const projectName = piAgentProjectName?.value?.trim() || "";
+  const response = await fetch("/api/pi-agent/projects/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/zip",
+      "X-File-Name": file.name,
+      "X-Project-Name": projectName,
+    },
+    body: await file.arrayBuffer(),
+  });
+  const payload = await response.json();
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Failed to upload PiAgent project archive.");
+  }
+  if (piAgentProjectUploadInput) {
+    piAgentProjectUploadInput.value = "";
+  }
+  if (piAgentProjectName) {
+    piAgentProjectName.value = "";
+  }
+  if (piAgentProjectStarter) {
+    piAgentProjectStarter.value = "";
+  }
+  setPiAgentProjectStatus("Project archive uploaded.");
+  await loadPiAgentProjects();
+  if (payload.project?.id) {
+    await selectPiAgentProject(payload.project.id);
+  }
+}
+
+function downloadPiAgentProjectArchive() {
+  if (!activePiAgentProject) {
+    setPiAgentEditorStatus("Select a project before downloading it.", true);
+    return;
+  }
+  const url = `/api/pi-agent/projects/${encodeURIComponent(activePiAgentProject.id)}/archive`;
+  window.open(url, "_blank", "noopener");
+}
+
 function ensurePiAgentTerminal() {
   if (piAgentTerminalReady || !piAgentTerminal) {
     return;
@@ -831,6 +881,21 @@ piAgentProjectCreateBtn?.addEventListener("click", async () => {
     setPiAgentProjectStatus(error instanceof Error ? error.message : "Failed to create project.", true);
   }
 });
+piAgentProjectUploadBtn?.addEventListener("click", () => {
+  piAgentProjectUploadInput?.click();
+});
+piAgentProjectUploadInput?.addEventListener("change", () => {
+  const file = piAgentProjectUploadInput?.files?.[0];
+  if (!file) {
+    return;
+  }
+  void uploadPiAgentProjectArchive(file).catch((error) => {
+    setPiAgentProjectStatus(
+      error instanceof Error ? error.message : "Failed to upload PiAgent project archive.",
+      true,
+    );
+  });
+});
 piAgentSaveFileBtn?.addEventListener("click", async () => {
   try {
     await savePiAgentFile();
@@ -838,6 +903,7 @@ piAgentSaveFileBtn?.addEventListener("click", async () => {
     setPiAgentEditorStatus(error instanceof Error ? error.message : "Failed to save file.", true);
   }
 });
+piAgentDownloadProjectBtn?.addEventListener("click", downloadPiAgentProjectArchive);
 refreshDevToolsBtn?.addEventListener("click", async () => {
   try {
     await loadDevToolsStatus();

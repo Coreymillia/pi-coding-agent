@@ -18,6 +18,7 @@ import struct
 import threading
 import time
 import uuid
+import zipfile
 from dataclasses import asdict, dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -65,6 +66,7 @@ PI_AGENT_PROJECT_METADATA_FILE = ".pi3groq-piagent-project.json"
 PI_AGENT_TREE_MAX_DEPTH = 8
 PI_AGENT_TREE_MAX_NODES = 500
 PI_AGENT_MAX_FILE_BYTES = 512 * 1024
+PI_AGENT_ARCHIVE_MAX_BYTES = 150 * 1024 * 1024
 PI_AGENT_DISPLAY_TEXT_LIMIT = 12000
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\].*?(?:\x07|\x1b\\))")
 PI_AGENT_AUTOSTART = os.getenv("PI3GROQ_PI_AGENT_AUTOSTART", "true").strip().lower() not in {"0", "false", "no", "off"}
@@ -110,6 +112,11 @@ def slugify_project_name(value: str) -> str:
     )
     collapsed = "-".join(part for part in lowered.split("-") if part)
     return collapsed[:40] or "project"
+
+
+def infer_project_name_from_filename(file_name: str) -> str:
+    name = Path(str(file_name or "").strip()).stem.strip()
+    return name or "Imported Project"
 
 
 def get_pi_agent_project_metadata_path(project_root: Path) -> Path:
@@ -338,6 +345,88 @@ def build_pi_agent_file_tree(
     return nodes, truncated
 
 
+def normalize_archive_entry(name: str) -> str:
+    normalized = posixpath.normpath(str(name or "").replace("\\", "/")).strip()
+    if normalized in {"", "."}:
+        return ""
+    if normalized.startswith("../") or normalized == ".." or normalized.startswith("/"):
+        raise ValueError(f"Archive entry escapes the project workspace: {name}")
+    return normalized
+
+
+def import_pi_agent_project_archive(
+    *,
+    file_name: str,
+    archive_bytes: bytes,
+    project_name: str = "",
+) -> PiAgentProjectManifest:
+    if not archive_bytes:
+        raise ValueError("Project archive is empty.")
+    if len(archive_bytes) > PI_AGENT_ARCHIVE_MAX_BYTES:
+        raise ValueError("Project archive is too large.")
+    normalized_name = str(project_name or "").strip() or infer_project_name_from_filename(file_name)
+    project = create_pi_agent_project(normalized_name)
+    project_root = Path(project.projectRoot).resolve()
+    try:
+        with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
+            if archive.testzip() is not None:
+                raise ValueError("Project archive is corrupted.")
+            infos = [info for info in archive.infolist() if info.filename]
+            normalized_entries = [
+                normalize_archive_entry(info.filename)
+                for info in infos
+            ]
+            importable_entries = [entry for entry in normalized_entries if entry]
+            common_root = ""
+            if importable_entries and all("/" in entry for entry in importable_entries):
+                root_candidate = importable_entries[0].split("/", 1)[0]
+                if all(entry.split("/", 1)[0] == root_candidate for entry in importable_entries):
+                    common_root = root_candidate
+            name_map: dict[str, str] = {}
+            for info, normalized in zip(infos, normalized_entries, strict=True):
+                if not normalized:
+                    continue
+                if common_root:
+                    normalized = normalized.split("/", 1)[1]
+                if normalized:
+                    name_map[info.filename] = normalized
+            if not name_map:
+                raise ValueError("Project archive has no importable files.")
+            for info in infos:
+                normalized = name_map.get(info.filename, "")
+                if not normalized:
+                    continue
+                target_path = (project_root / normalized).resolve()
+                if project_root not in target_path.parents and target_path != project_root:
+                    raise ValueError(f"Archive entry escapes the project workspace: {info.filename}")
+                if info.is_dir():
+                    target_path.mkdir(parents=True, exist_ok=True)
+                    continue
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info, "r") as source, target_path.open("wb") as destination:
+                    shutil.copyfileobj(source, destination)
+        return update_pi_agent_project_manifest(project.id, lambda current: current)
+    except (zipfile.BadZipFile, OSError, ValueError):
+        shutil.rmtree(project_root, ignore_errors=True)
+        raise
+
+
+def export_pi_agent_project_archive(project: PiAgentProjectManifest) -> tuple[bytes, str]:
+    project_root = Path(project.projectRoot).resolve()
+    output = BytesIO()
+    with zipfile.ZipFile(output, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for dir_path, dir_names, file_names in os.walk(project_root):
+            dir_names[:] = sorted(name for name in dir_names if name != "__pycache__")
+            file_names = sorted(file_names)
+            current_dir = Path(dir_path)
+            for file_name in file_names:
+                file_path = current_dir / file_name
+                relative_path = file_path.relative_to(project_root).as_posix()
+                archive.write(file_path, arcname=relative_path)
+    archive_name = f"{slugify_project_name(project.name)}.zip"
+    return output.getvalue(), archive_name
+
+
 def normalize_base_url(value: str) -> str:
     normalized = (value or "").strip()
     if not normalized:
@@ -430,6 +519,30 @@ def build_command_status(
     }
 
 
+def command_supports_text(
+    executable: str,
+    *,
+    help_args: list[str] | None = None,
+    needle: str,
+    timeout: float = 4.0,
+) -> bool:
+    binary_path = shutil.which(executable)
+    if not binary_path:
+        return False
+    try:
+        completed = subprocess.run(
+            [binary_path, *((help_args or ["--help"]))],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    combined = f"{completed.stdout or ''}\n{completed.stderr or ''}"
+    return needle in combined
+
+
 def build_browser_ide_status() -> dict[str, Any]:
     candidates = [
         ("code-server", "code-server", 8080, "/"),
@@ -450,6 +563,15 @@ def build_browser_ide_status() -> dict[str, Any]:
                 "defaultPort": configured_port or port,
                 "defaultPath": configured_path or path,
             }
+    if command_supports_text("code", needle="serve-web"):
+        status = build_command_status("code")
+        return {
+            **status,
+            "kind": "code-serve-web",
+            "label": "VS Code Serve Web",
+            "defaultPort": configured_port or 8080,
+            "defaultPath": configured_path or "/",
+        }
     return {
         "installed": False,
         "binaryPath": "",
@@ -643,6 +765,22 @@ def read_json_request(
     return parsed if isinstance(parsed, dict) else {}
 
 
+def read_request_bytes(
+    handler: BaseHTTPRequestHandler,
+    *,
+    max_length: int,
+) -> bytes:
+    length = int(handler.headers.get("Content-Length", "0") or "0")
+    if length <= 0:
+        raise ValueError("Request body is empty.")
+    if length > max_length:
+        raise ValueError("Request body is too large.")
+    raw = handler.rfile.read(length)
+    if not raw:
+        raise ValueError("Request body is empty.")
+    return raw
+
+
 def json_response(
     handler: BaseHTTPRequestHandler,
     payload: dict[str, Any],
@@ -676,6 +814,24 @@ def redirect_response(handler: BaseHTTPRequestHandler, location: str) -> None:
     handler.send_header("Location", location)
     handler.send_header("Cache-Control", "no-store")
     handler.end_headers()
+
+
+def binary_response(
+    handler: BaseHTTPRequestHandler,
+    data: bytes,
+    *,
+    content_type: str,
+    file_name: str = "",
+    status: int = HTTPStatus.OK,
+) -> None:
+    handler.send_response(status)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(data)))
+    if file_name:
+        handler.send_header("Content-Disposition", f'attachment; filename="{file_name}"')
+    handler.end_headers()
+    handler.wfile.write(data)
 
 
 def fetch_remote_json(
@@ -1469,6 +1625,30 @@ class Pi3GroqHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.BAD_REQUEST,
                 )
             return
+        if route == "/api/pi-agent/projects/import":
+            try:
+                archive_bytes = read_request_bytes(self, max_length=PI_AGENT_ARCHIVE_MAX_BYTES)
+                file_name = str(self.headers.get("X-File-Name", "") or "").strip()
+                project_name = str(self.headers.get("X-Project-Name", "") or "").strip()
+                project = import_pi_agent_project_archive(
+                    file_name=file_name,
+                    archive_bytes=archive_bytes,
+                    project_name=project_name,
+                )
+                json_response(
+                    self,
+                    {
+                        "ok": True,
+                        "project": serialize_pi_agent_project(project),
+                    },
+                )
+            except (ValueError, TypeError, OSError) as error:
+                json_response(
+                    self,
+                    {"ok": False, "error": str(error)},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            return
         if route.startswith("/api/pi-agent/projects/"):
             self.handle_pi_agent_project_post(route)
             return
@@ -1516,6 +1696,22 @@ class Pi3GroqHandler(BaseHTTPRequestHandler):
                     "truncated": truncated,
                 },
             )
+            return
+        if len(parts) == 5 and parts[4] == "archive":
+            try:
+                archive_bytes, archive_name = export_pi_agent_project_archive(project)
+                binary_response(
+                    self,
+                    archive_bytes,
+                    content_type="application/zip",
+                    file_name=archive_name,
+                )
+            except OSError as error:
+                json_response(
+                    self,
+                    {"ok": False, "error": str(error)},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
             return
         if len(parts) == 5 and parts[4] == "file":
             requested_path = (parse_qs(parsed.query).get("path") or [""])[0]

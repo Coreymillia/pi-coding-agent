@@ -109,9 +109,11 @@ The Pi3Groq web server keeps PiAgent separate from Whisplay companion mode:
 The browser UI now also supports lightweight PiAgent project workspaces:
 
 - create/select a PiAgent project sandbox
+- upload an existing project ZIP into a new PiAgent sandbox
 - browse a recursive project tree
 - open files in the browser
 - save file edits back into the selected project
+- download a finished PiAgent project as a ZIP archive
 - start PiAgent inside the selected project root without changing PiAgent itself
 
 The main browser page also includes a **Local Dev Tools** panel:

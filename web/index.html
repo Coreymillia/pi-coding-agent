@@ -176,6 +176,8 @@
           </label>
           <div class="composer-actions">
             <button class="button secondary" id="piAgentProjectCreateBtn" type="button">Create Project</button>
+            <button class="button secondary" id="piAgentProjectUploadBtn" type="button">Upload Project ZIP</button>
+            <input id="piAgentProjectUploadInput" type="file" accept=".zip,application/zip" hidden />
           </div>
           <div id="piAgentProjectStatus" class="muted">Create a lightweight project sandbox, then start PiAgent inside it.</div>
           <div id="piAgentProjectsList" class="pi-agent-project-list"></div>
@@ -197,6 +199,7 @@
                 </div>
                 <div class="composer-actions">
                   <button class="button secondary" id="piAgentSaveFileBtn" type="button">Save File</button>
+                  <button class="button secondary" id="piAgentDownloadProjectBtn" type="button">Download Project ZIP</button>
                 </div>
               </div>
               <textarea id="piAgentFileEditor" class="pi-agent-file-editor" spellcheck="false" placeholder="File contents will appear here when you open a project file."></textarea>
